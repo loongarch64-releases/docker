@@ -2,6 +2,7 @@ include ../common.mk
 
 PLUGINS_DIR=$(realpath $(CURDIR)/../plugins)
 GO_BASE_IMAGE=golang
+REGISTRY?=docker.io
 GO_IMAGE?=$(GO_BASE_IMAGE):$(GO_VERSION)-trixie
 GEN_RPM_VER=$(shell ./gen-rpm-ver $(realpath $(CURDIR)/../src/github.com/docker/cli) "$(VERSION)")
 GEN_BUILDX_RPM_VER=$(shell ./gen-rpm-ver $(realpath $(CURDIR)/../src/github.com/docker/buildx) "$(DOCKER_BUILDX_REF)")
@@ -22,6 +23,7 @@ BUILD?=DOCKER_BUILDKIT=1 \
 	$(RH_FLAGS) \
 	$(BUILD_IMAGE_FLAG) \
 	--build-arg GO_IMAGE=$(GO_IMAGE) \
+	--build-arg REGISTRY=$(REGISTRY) \
 	-t rpmbuild-$@/$(ARCH) \
 	--platform linux/$(ARCH) \
 	-f $@/Dockerfile \

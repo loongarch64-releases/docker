@@ -4,10 +4,11 @@ ARG GO_IMAGE=golang:latest
 ARG DISTRO=anolisos
 ARG SUITE=23
 ARG BUILD_IMAGE=${DISTRO}:${SUITE}
+ARG REGISTRY=lcr.loongnix.cn
 
-FROM ${GO_IMAGE} AS golang
+FROM ${REGISTRY:-docker.io}/library/${GO_IMAGE} AS golang
 
-FROM openanolis/${BUILD_IMAGE}
+FROM ${REGISTRY:-docker.io}/openanolis/${BUILD_IMAGE}
 ENV GOPROXY=https://proxy.golang.cn|direct
 ENV GO111MODULE=on
 ENV GOPATH=/go
