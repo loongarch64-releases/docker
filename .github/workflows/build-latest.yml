@@ -1,0 +1,65 @@
+name: Auto Build Docker Release
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.VERSION }}
+      should_build: ${{ steps.check.outputs.SHOULD_BUILD }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # gh 命令需要这个环境变量
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check version and release status
+        id: check
+        run: |
+          # 1. 获取上游最新版本
+          # 假设从某个 API 获取到了 docker-v29.0.0
+          DOCKER_VERSION=$(curl -s "https://api.github.com/repos/moby/moby/releases/latest" | jq -r ".tag_name")
+          # docker-v29.0.0 --> 29.0.0
+          DOCKER_VERSION=${DOCKER_VERSION#*v}
+          echo "Latest upstream docker version: $DOCKER_VERSION"
+
+          # 2. 使用 gh 检查本仓库是否存在该 Release
+          # --repo 指定仓库，2>/dev/null 忽略报错日志
+          if gh release view "$DOCKER_VERSION" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            echo "Release $DOCKER_VERSION already exists. Skipping."
+            echo "SHOULD_BUILD=false" >> $GITHUB_OUTPUT
+          else
+            echo "Release $DOCKER_VERSION not found. Need to build."
+            echo "VERSION=$DOCKER_VERSION" >> $GITHUB_OUTPUT
+            echo "SHOULD_BUILD=true" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-release:
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write 
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Docker
+        run: |
+          chmod +x ./process_version.sh
+          ./process_version.sh ${{ needs.check-version.outputs.version }}
+
+      - name: Create Release and Upload
+        # 使用 gh release create 更加统一
+        run: |
+          gh release create ${{ needs.check-version.outputs.version }} \
+            --title "Docker Release ${{ needs.check-version.outputs.version }}" \
+            --notes "Automated build for version ${{ needs.check-version.outputs.version }}" \
+            dists/*
+

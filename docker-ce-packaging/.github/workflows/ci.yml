@@ -1,0 +1,58 @@
+name: ci
+
+# Default to 'contents: read', which grants actions to read commits.
+#
+# If any permission is set, any permission not included in the list is
+# implicitly set to "none".
+#
+# see https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#permissions
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'master'
+      - '[0-9]+.[0-9]{2}'
+    tags:
+      - 'v*'
+  pull_request:
+
+jobs:
+  generate-matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      targets: ${{ steps.get-targets.outputs.targets }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Get targets
+        id: get-targets
+        run: |
+          echo "targets=$(jq -c '[to_entries[] | .key as $distro | .value.arches[] | {distro: $distro, arch: .}]' distros.json)" >> $GITHUB_OUTPUT
+
+  build:
+    needs:
+      - generate-matrix
+    runs-on: ${{ matrix.target.arch != 'amd64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 60 # guardrails timeout for the whole job
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.generate-matrix.outputs.targets) }}
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      -
+        name: Build
+        run: |
+          make ARCH=${{ matrix.target.arch }} ${{ matrix.target.distro }}
