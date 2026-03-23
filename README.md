@@ -1,6 +1,6 @@
 # docker (LoongArch64 Build)
 
-[![Build Status](https://github.com/loongarch64-releases/moby/actions/workflows/release.yml/badge.svg)](https://github.com/loongarch64-releases/docker/actions)
+[![Build Status](https://github.com/loongarch64-releases/docker/actions/workflows/release.yml/badge.svg)](https://github.com/loongarch64-releases/docker/actions)
 
 This repository contains the LoongArch64 build configuration and scripts for **[moby](https://github.com/moby/moby)**, originally developed by **moby**.
 
