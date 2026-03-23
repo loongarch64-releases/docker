@@ -1,4 +1,4 @@
-name: Auto Build Release
+name: Auto Build moby
 
 on:
   schedule:
@@ -6,67 +6,54 @@ on:
   workflow_dispatch:
 
 env:
-  UPSTREAM_OWNER: "moby"  # 上游开发者/组织名
-  UPSTREAM_REPO: "moby"   # 上游仓库名
+  UPSTREAM_OWNER: "moby"
+  UPSTREAM_REPO: "moby"
 
 jobs:
-  check-version:
+  build-and-release:
     if: github.repository_owner == 'loongarch64-releases'
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.check.outputs.VERSION }}
-      should_build: ${{ steps.check.outputs.SHOULD_BUILD }}
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # gh 命令需要这个环境变量
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Check version and release status
-        id: check
-        run: |
-          # 1. 获取上游最新版本
-          # docker-v29.0.0
-          LATEST_VERSION=$(curl -s "https://api.github.com/repos/${{ env.UPSTREAM_OWNER }}/${{ env.UPSTREAM_REPO }}/releases/latest" | jq -r ".tag_name")
-          # docker-v29.0.0 --> 29.0.0
-          LATEST_VERSION=${LATEST_VERSION#*v}
-          echo "Latest upstream docker version: $LATEST_VERSION"
-
-          # 2. 使用 gh 检查本仓库是否存在该 Release
-          # --repo 指定仓库，2>/dev/null 忽略报错日志
-          if gh release view "$LATEST_VERSION" --repo ${{ github.repository }} >/dev/null 2>&1; then
-            echo "Release $LATEST_VERSION already exists. Skipping."
-            echo "SHOULD_BUILD=false" >> $GITHUB_OUTPUT
-          else
-            echo "Release $LATEST_VERSION not found. Need to build."
-            echo "VERSION=$LATEST_VERSION" >> $GITHUB_OUTPUT
-            echo "SHOULD_BUILD=true" >> $GITHUB_OUTPUT
-          fi
-
-  release:
-    needs: check-version
-    if: needs.check-version.outputs.should_build == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write 
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
-
-      - name: Build
+      - name: Check Version
+        id: get_version
         run: |
-          chmod +x ./process_version.sh
-          ./process_version.sh ${{ needs.check-version.outputs.version }}
+          chmod +x ./scripts/get_version.sh
+          LATEST_VERSION=$(./scripts/get_version.sh)
+          # 1. 获取上游最新版本
+          echo "Latest upstream version: $LATEST_VERSION"
 
-      - name: Upload
-        # 使用 gh release create 更加统一
+          # 2. 检查本仓库是否已存在该 Release
+          if gh release view "${LATEST_VERSION}" >/dev/null 2>&1; then
+            echo "Release ${LATEST_VERSION} already exists. Skipping."
+            echo "skip_workflow=true" >> $GITHUB_OUTPUT
+          else
+            echo "Release ${LATEST_VERSION} not found. Need to build."
+            echo "skip_workflow=false" >> $GITHUB_OUTPUT
+          fi
+
+           # 3. 无论是否跳过，都输出版本号供后续步骤参考（如果需构建）
+          echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build Binary
+        if: steps.get_version.outputs.skip_workflow != 'true'
         run: |
-          gh release create ${{ needs.check-version.outputs.version }} \
-            --title "Release ${{ needs.check-version.outputs.version }}" \
-            --notes "Automated build for version ${{ needs.check-version.outputs.version }} based on ${{ env.UPSTREAM_OWNER }}/${{ env.UPSTREAM_REPO }}" \
-            dists/*
+          VERSION="${{ steps.get_version.outputs.version }}"
+          chmod +x ./scripts/build_in_docker.sh
+          ./scripts/build.sh "$VERSION"
 
+      - name: Upload Release
+        if: steps.get_version.outputs.skip_workflow != 'true'
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          gh release create "$VERSION" \
+            --title "${UPSTREAM_REPO} $VERSION" \
+            --notes "Automated build for version ${VERSION} based on ${UPSTREAM_OWNER}/${UPSTREAM_REPO}" \
+            dists/$VERSION/*
