@@ -18,9 +18,10 @@ This repository contains the LoongArch64 build configuration and scripts for **[
    cd docker
    ```
 
-2. **Get latest version
+2. **Get latest version**
    ```bash
    ./scripts/get_version.sh
+   <version>
    ```
 
 3. **Run the build script**:
