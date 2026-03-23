@@ -1,4 +1,4 @@
-# docker (LoongArch64 Build)
+# Docker (LoongArch64 Build)
 
 [![Build Status](https://github.com/loongarch64-releases/docker/actions/workflows/release.yml/badge.svg)](https://github.com/loongarch64-releases/docker/actions)
 
