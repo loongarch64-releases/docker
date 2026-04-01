@@ -20,7 +20,8 @@ SRCS="srcs"
 REGISTRY="lcr.loongnix.cn"
 TARGET="anolis-23"
 
-mkdir -p "${DISTS}/${VERSION}" "${SRCS}"
+
+mkdir -p "${DISTS}/${VERSION}"
 
 # ==========================================
 # 👇 用户自定义构建逻辑 (示例)
@@ -28,6 +29,7 @@ mkdir -p "${DISTS}/${VERSION}" "${SRCS}"
 
 echo "🔧 Compiling ${UPSTREAM_OWNER}/${UPSTREAM_REPO} ${VERSION}..."
 
+PACKAGE_DIR="$(mktemp -d)"
 # 1. 准备阶段：安装依赖、下载代码、应用补丁等
 prepare()
 {
@@ -37,6 +39,13 @@ prepare()
     # 例如：apt-get update && apt-get install -y build-essential
     # 例如：git clone -b ${VERSION} --depth=1 https://github.com/moby/moby ${SRCS}/${VERSION}
     # 例如：patch -p1 < patches/loongarch-fix.patch
+    echo "下载 docker-ce-packaging ..."
+    git clone -b loongarch64 --depth=1 https://github.com/loongarch64-releases/docker-ce-packaging.git ${PACKAGE_DIR}
+
+    # 获取组建版本信息
+    ${SCRIPT_DIR}/get_components_version.sh ${VERSION}
+    echo "加载版本信息 "
+    source "${ROOT_DIR}/docker-components.txt"
     
     echo "✅ [Prepare] Environment ready."
 }
@@ -50,9 +59,8 @@ build()
     # 例如：make -j$(nproc) ARCH=loongarch64
     # 例如：cmake -DCMAKE_BUILD_TYPE=Release .. && make
     
-    pushd docker-ce-packaging > /dev/null
+    pushd ${PACKAGE_DIR} > /dev/null
 
-    SPEC_FILES="docker-ce.spec docker-ce-cli.spec" \
     ARCH=$ARCH \
     ARCHES=$ARCH \
     VERSION=${VERSION} \
@@ -79,11 +87,11 @@ post_build()
     # 例如：strip dist/binary
     
     # 拷贝产物：根据不同的 TARGET 查找对应的 RPM 目录
-    local RPM_SOURCE_DIR="docker-ce-packaging/rpm/rpmbuild/${TARGET}/RPMS/loongarch64"
+    local RPM_SOURCE_DIR="${PACKAGE_DIR}/rpm/rpmbuild/${TARGET}/RPMS/loongarch64"
     
     if [ -d "$RPM_SOURCE_DIR" ]; then
         echo "Copying $TARGET RPMs to $DISTS..."
-        cp ${RPM_SOURCE_DIR}/*${VERSION}*.rpm ${DISTS}/${VERSION}
+        cp ${RPM_SOURCE_DIR}/*.rpm ${DISTS}/${VERSION}
     else
         echo "Warning: Build output directory ${RPM_SOURCE_DIR} not found for ${TARGET}"
         return 1
