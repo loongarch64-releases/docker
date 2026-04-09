@@ -45,7 +45,7 @@ prepare()
     # 获取组建版本信息
     ${SCRIPT_DIR}/get_components_version.sh ${VERSION}
     echo "加载版本信息 "
-    source "${ROOT_DIR}/docker-components.txt"
+    source "${ROOT_DIR}/docker_components.txt"
     
     echo "✅ [Prepare] Environment ready."
 }
